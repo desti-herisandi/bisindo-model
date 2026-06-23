@@ -1,0 +1,2613 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BISINDO Detector + Gesture Generator</title>
+
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"
+        crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js" crossorigin="anonymous"></script>
+    <link
+        href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap"
+        rel="stylesheet">
+
+    <style>
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0
+        }
+
+        html,
+        body {
+            height: 100%;
+            font-family: 'DM Sans', system-ui, sans-serif;
+            background: #f0f0ed;
+            color: #1e1e1e;
+            overflow: hidden
+        }
+
+        /* ── Shell ── */
+        .shell {
+            display: flex;
+            flex-direction: column;
+            height: 100vh
+        }
+
+        header {
+            flex-shrink: 0;
+            height: 52px;
+            padding: 0 24px;
+            background: linear-gradient(90deg, #3ec6d4 0%, #5b6cf8 60%, #9b59c3 100%);
+            border-bottom: none;
+            display: flex;
+            align-items: center;
+            gap: 12px
+        }
+
+        header h1 {
+            font-size: 15px;
+            font-weight: 600;
+            color: #fff;
+            letter-spacing: 0.01em
+        }
+
+        .fps-tag {
+            font-size: 11px;
+            color: rgba(255, 255, 255, 0.7);
+            background: rgba(255, 255, 255, 0.18);
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-variant-numeric: tabular-nums
+        }
+
+        .tab-bar {
+            display: flex;
+            gap: 2px;
+            margin-left: auto
+        }
+
+        .tab-btn {
+            padding: 5px 14px;
+            border-radius: 6px;
+            border: 1.5px solid rgba(255, 255, 255, 0.45);
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            background: transparent;
+            color: rgba(255, 255, 255, 0.85);
+            transition: all .15s;
+            font-family: 'DM Sans', sans-serif
+        }
+
+        .tab-btn.active {
+            background: #fff;
+            color: #3a3a3a;
+            border-color: #fff
+        }
+
+        .tab-btn:hover:not(.active) {
+            background: rgba(255, 255, 255, 0.12)
+        }
+
+        .tab-panel {
+            display: none;
+            flex: 1;
+            overflow: hidden
+        }
+
+        .tab-panel.active {
+            display: flex
+        }
+
+        /* ── Detector Layout ── */
+        .body-row {
+            flex: 1;
+            display: flex;
+            overflow: hidden
+        }
+
+        .video-col {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 16px;
+            gap: 12px;
+            overflow: hidden;
+            background: #f0f0ed
+        }
+
+        .camera-area {
+            display: flex;
+            gap: 12px;
+            max-width: 870px;
+            width: 100%;
+            align-items: flex-start
+        }
+
+        .canvas-wrapper {
+            position: relative;
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid #e2e0da;
+            background: #111;
+            flex: 1;
+            min-width: 0
+        }
+
+        #inputVideo {
+            display: none
+        }
+
+        #outputCanvas {
+            display: block;
+            width: 100%;
+            height: auto
+        }
+
+        #loadingOverlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(10, 10, 10, .88);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            z-index: 10
+        }
+
+        .spinner {
+            width: 26px;
+            height: 26px;
+            border: 2px solid rgba(255, 255, 255, .15);
+            border-top-color: #5b6cf8;
+            border-radius: 50%;
+            animation: spin .75s linear infinite
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg)
+            }
+        }
+
+        #loadingMsg {
+            font-size: 12px;
+            color: #aaa
+        }
+
+        /* Output panel — right of camera */
+        .output-panel {
+            width: 200px;
+            flex-shrink: 0;
+            background: #fff;
+            border: 1px solid #e2e0da;
+            border-radius: 12px;
+            padding: 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px
+        }
+
+        .output-section-label {
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: .5px;
+            color: #999
+        }
+
+        .output-main {
+            font-size: 26px;
+            font-weight: 700;
+            color: #5b6cf8;
+            letter-spacing: -.02em;
+            min-height: 34px
+        }
+
+        .output-desc {
+            font-size: 11px;
+            color: #888;
+            line-height: 1.5
+        }
+
+        .output-divider {
+            height: 1px;
+            background: #ebebeb
+        }
+
+        .history-list {
+            display: flex;
+            flex-direction: column;
+            gap: 3px
+        }
+
+        .history-item {
+            font-size: 11px;
+            color: #555;
+            padding: 3px 7px;
+            background: #f5f4f1;
+            border-radius: 4px;
+            border-left: 2px solid #5b6cf8
+        }
+
+        .history-empty {
+            font-size: 11px;
+            color: #ccc;
+            font-style: italic
+        }
+
+        /* Controls row */
+        .controls {
+            display: flex;
+            gap: 8px
+        }
+
+        button {
+            padding: 7px 14px;
+            border-radius: 7px;
+            border: 1px solid #e2e0da;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all .12s;
+            background: #fff;
+            color: #3a3a3a;
+            font-family: 'DM Sans', sans-serif
+        }
+
+        button:hover {
+            background: #f5f4f1
+        }
+
+        button:active {
+            transform: scale(.98)
+        }
+
+        #startBtn {
+            background: #5b6cf8;
+            color: #fff;
+            border-color: #5b6cf8
+        }
+
+        #startBtn:hover {
+            background: #4a5ae6
+        }
+
+        #startBtn:disabled,
+        #stopBtn:disabled {
+            opacity: .4;
+            cursor: not-allowed;
+            pointer-events: none
+        }
+
+        /* TTS toggle button */
+        #ttsBtn {
+            background: #fff;
+            color: #3a3a3a;
+            border-color: #e2e0da;
+            font-size: 13px
+        }
+
+        #ttsBtn.tts-on {
+            background: #d1fae5;
+            color: #065f46;
+            border-color: #6ee7b7
+        }
+
+        #ttsBtn.tts-off {
+            background: #fee2e2;
+            color: #991b1b;
+            border-color: #fca5a5
+        }
+
+        /* Hand display panels */
+        .hand-display {
+            max-width: 870px;
+            width: 100%;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px
+        }
+
+        .hand-panel {
+            background: #fff;
+            border: 1px solid #e2e0da;
+            border-radius: 10px;
+            padding: 12px
+        }
+
+        .hand-panel-header {
+            font-size: 11px;
+            font-weight: 600;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: .5px;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between
+        }
+
+        .orient-tag {
+            font-size: 10px;
+            padding: 2px 7px;
+            border-radius: 4px;
+            font-weight: 500;
+            text-transform: none;
+            letter-spacing: 0
+        }
+
+        .tag-palm {
+            background: #d1fae5;
+            color: #065f46
+        }
+
+        .tag-back {
+            background: #fee2e2;
+            color: #991b1b
+        }
+
+        .tag-none {
+            background: #f0f0ed;
+            color: #aaa
+        }
+
+        .finger-row {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 4px
+        }
+
+        .finger-box {
+            background: #f5f4f1;
+            border: 1px solid #e2e0da;
+            border-radius: 6px;
+            padding: 6px 2px;
+            text-align: center;
+            transition: background .12s, border-color .12s
+        }
+
+        .finger-box.extended {
+            background: #eef0ff;
+            border-color: #5b6cf8
+        }
+
+        .finger-box .fn {
+            font-size: 8px;
+            color: #aaa
+        }
+
+        .finger-box .fs {
+            font-size: 9px;
+            font-weight: 500;
+            margin-top: 2px
+        }
+
+        .finger-box.extended .fs {
+            color: #5b6cf8
+        }
+
+        .finger-box:not(.extended) .fs {
+            color: #ccc
+        }
+
+        .finger-icon {
+            width: 16px;
+            height: 16px;
+            margin: 0 auto 2px;
+            display: flex;
+            align-items: center;
+            justify-content: center
+        }
+
+        .finger-icon svg {
+            width: 14px;
+            height: 14px;
+            stroke: #bbb
+        }
+
+        .finger-box.extended .finger-icon svg {
+            stroke: #5b6cf8
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 300px;
+            flex-shrink: 0;
+            background: #fff;
+            border-left: 1px solid #e2e0da;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden
+        }
+
+        .sidebar-scroll {
+            flex: 1;
+            overflow-y: auto;
+            overflow-x: hidden
+        }
+
+        .sidebar-scroll::-webkit-scrollbar {
+            width: 3px
+        }
+
+        .sidebar-scroll::-webkit-scrollbar-thumb {
+            background: #e2e0da;
+            border-radius: 2px
+        }
+
+        .sidebar-section {
+            padding: 12px 14px;
+            border-bottom: 1px solid #ebebeb
+        }
+
+        .sidebar-section h3 {
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: .6px;
+            color: #aaa;
+            margin-bottom: 8px
+        }
+
+        .gesture-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 4px
+        }
+
+        .gesture-card {
+            background: #f5f4f1;
+            border: 1px solid #e2e0da;
+            border-radius: 7px;
+            padding: 6px 9px;
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            transition: border-color .15s, background .15s;
+            flex-direction: column;
+            align-items: stretch
+        }
+
+        .gesture-card-top {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            width: 100%
+        }
+
+        .gesture-card.detected {
+            border-color: #5b6cf8;
+            background: #eef0ff
+        }
+
+        .gesture-card.generated-card {
+            border-color: #9b59c3;
+            background: #f7f0ff
+        }
+
+        .gesture-card.generated-card.detected {
+            border-color: #7c3aed;
+            background: #ede9fe
+        }
+
+        .gesture-card .ginfo {
+            flex: 1;
+            min-width: 0
+        }
+
+        .gesture-name {
+            font-size: 11px;
+            font-weight: 600;
+            color: #1e1e1e;
+            line-height: 1.2
+        }
+
+        .gesture-desc {
+            font-size: 9px;
+            color: #aaa;
+            margin-top: 1px;
+            white-space: normal;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            word-break: break-word;
+            line-height: 1.3
+        }
+
+        .gesture-card.detected .gesture-badge {
+            color: #5b6cf8
+        }
+
+        .gesture-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 2px;
+            background: #e2e0da;
+            flex-shrink: 0;
+            transition: background .15s
+        }
+
+        .gesture-card.detected .gesture-dot {
+            background: #5b6cf8
+        }
+
+        .gesture-card.generated-card .gesture-dot {
+            background: #9b59c3
+        }
+
+        .gesture-card.generated-card.detected .gesture-dot {
+            background: #7c3aed
+        }
+
+        .detect-card {
+            background: #f5f4f1;
+            border: 1px solid #e2e0da;
+            border-radius: 7px;
+            padding: 7px 9px;
+            margin-bottom: 4px;
+            display: flex;
+            align-items: center;
+            gap: 8px
+        }
+
+        .detect-card .info {
+            flex: 1;
+            min-width: 0
+        }
+
+        .detect-card .info .label {
+            font-size: 11px;
+            font-weight: 500;
+            color: #1e1e1e
+        }
+
+        .detect-card .info .sub {
+            font-size: 10px;
+            color: #aaa
+        }
+
+        .detect-indicator {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: #e2e0da;
+            flex-shrink: 0;
+            transition: background .2s
+        }
+
+        .detect-indicator.active {
+            background: #3dbf9e
+        }
+
+        .landmark-list {
+            display: flex;
+            flex-direction: column;
+            gap: 2px
+        }
+
+        .landmark-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 10px;
+            padding: 3px 7px;
+            background: #f5f4f1;
+            border-radius: 4px
+        }
+
+        .lname {
+            color: #aaa
+        }
+
+        .lval {
+            color: #555;
+            font-variant-numeric: tabular-nums
+        }
+
+        .legends-wrap {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            justify-content: center;
+            max-width: 870px;
+            width: 100%
+        }
+
+        .legend-row {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 10px;
+            color: #aaa
+        }
+
+        .legend-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            flex-shrink: 0
+        }
+
+        .file-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 5px 7px;
+            border-radius: 6px;
+            margin-bottom: 3px;
+            background: #f5f4f1;
+            border: 1px solid #e2e0da
+        }
+
+        .file-thumb {
+            width: 36px;
+            height: 36px;
+            border-radius: 5px;
+            object-fit: cover;
+            border: 1px solid #e2e0da;
+            flex-shrink: 0;
+            background: #e2e0da
+        }
+
+        .file-thumb-placeholder {
+            width: 36px;
+            height: 36px;
+            border-radius: 5px;
+            border: 1px solid #e2e0da;
+            flex-shrink: 0;
+            background: #e2e0da;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px
+        }
+
+        .file-info {
+            flex: 1;
+            min-width: 0
+        }
+
+        .file-name {
+            font-size: 11px;
+            font-weight: 500;
+            color: #555;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis
+        }
+
+        .file-meta {
+            font-size: 10px;
+            color: #aaa
+        }
+
+        .file-status {
+            font-size: 10px;
+            flex-shrink: 0
+        }
+
+        .fs-wait {
+            color: #aaa
+        }
+
+        .fs-ok {
+            color: #3dbf9e
+        }
+
+        .fs-dup {
+            color: #d97706
+        }
+
+        .fs-err {
+            color: #dc2626
+        }
+
+        .file-remove {
+            width: 18px;
+            height: 18px;
+            border: none;
+            background: transparent;
+            color: #ccc;
+            cursor: pointer;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 3px;
+            flex-shrink: 0
+        }
+
+        .file-remove:hover {
+            background: #f0f0ed;
+            color: #888
+        }
+
+        /* Progress */
+        .progress-wrap {
+            padding: 14px;
+            border-top: 1px solid #ebebeb;
+            background: #fff
+        }
+
+        .progress-bar-bg {
+            height: 4px;
+            background: #e2e0da;
+            border-radius: 2px;
+            overflow: hidden;
+            margin: 8px 0
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #3ec6d4, #5b6cf8, #9b59c3);
+            border-radius: 2px;
+            transition: width .3s;
+            width: 0
+        }
+
+        .progress-label {
+            font-size: 11px;
+            color: #aaa;
+            display: flex;
+            justify-content: space-between
+        }
+
+        .action-row {
+            display: flex;
+            gap: 6px;
+            margin-top: 10px;
+            flex-wrap: wrap
+        }
+
+        /* Right panel */
+        .gen-right-top {
+            flex: 1;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column
+        }
+
+        .gen-tabs {
+            display: flex;
+            gap: 1px;
+            background: #e2e0da;
+            border-bottom: 1px solid #e2e0da;
+            flex-shrink: 0
+        }
+
+        .gen-tab {
+            padding: 9px 16px;
+            font-size: 12px;
+            font-weight: 500;
+            color: #888;
+            cursor: pointer;
+            border: none;
+            background: #f0f0ed;
+            transition: all .12s;
+            font-family: 'DM Sans', sans-serif
+        }
+
+        .gen-tab.active {
+            color: #5b6cf8;
+            background: #fff;
+            border-bottom: 2px solid #5b6cf8
+        }
+
+        .gen-tab:hover:not(.active) {
+            color: #555;
+            background: #f5f4f1
+        }
+
+        .gen-pane {
+            display: none;
+            flex: 1;
+            overflow: auto;
+            padding: 16px;
+            background: #f0f0ed
+        }
+
+        .gen-pane.active {
+            display: block
+        }
+
+        .gen-pane::-webkit-scrollbar {
+            width: 4px
+        }
+
+        .gen-pane::-webkit-scrollbar-thumb {
+            background: #e2e0da
+        }
+
+        /* Preview grid */
+        .preview-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+            gap: 8px
+        }
+
+        .preview-card {
+            background: #fff;
+            border: 1px solid #e2e0da;
+            border-radius: 8px;
+            overflow: hidden;
+            transition: border-color .15s
+        }
+
+        .preview-card:hover {
+            border-color: #5b6cf8
+        }
+
+        .preview-card img {
+            width: 100%;
+            aspect-ratio: 1;
+            object-fit: cover;
+            display: block
+        }
+
+        .preview-card-info {
+            padding: 6px 7px
+        }
+
+        .preview-card-name {
+            font-size: 10px;
+            font-weight: 600;
+            color: #555;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis
+        }
+
+        .preview-card-label {
+            font-size: 9px;
+            color: #aaa;
+            margin-top: 1px
+        }
+
+        .preview-card.dup-card {
+            border-color: #d97706
+        }
+
+        .preview-card.dup-card .preview-card-name {
+            color: #d97706
+        }
+
+        .badge-dup {
+            font-size: 9px;
+            background: #fef3c7;
+            color: #92400e;
+            padding: 1px 5px;
+            border-radius: 3px;
+            display: inline-block;
+            margin-top: 2px
+        }
+
+        /* Extracted data */
+        .extracted-gesture {
+            margin-bottom: 16px;
+            padding: 12px;
+            background: #fff;
+            border: 1px solid #e2e0da;
+            border-radius: 10px
+        }
+
+        .extracted-gesture-name {
+            font-size: 13px;
+            font-weight: 700;
+            color: #1e1e1e;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px
+        }
+
+        .extracted-gesture-name span {
+            font-size: 10px;
+            font-weight: 500;
+            padding: 2px 7px;
+            border-radius: 10px;
+            background: #f0f0ed;
+            color: #aaa
+        }
+
+        .feature-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+            margin-bottom: 6px
+        }
+
+        .feature-chip {
+            background: #f5f4f1;
+            border: 1px solid #e2e0da;
+            border-radius: 6px;
+            padding: 5px 8px
+        }
+
+        .feature-chip-label {
+            font-size: 9px;
+            color: #aaa;
+            margin-bottom: 2px;
+            text-transform: uppercase;
+            letter-spacing: .4px
+        }
+
+        .feature-chip-val {
+            font-size: 11px;
+            font-weight: 600;
+            color: #555
+        }
+
+        .threshold-row {
+            margin-top: 6px;
+            padding: 6px 8px;
+            background: #f5f4f1;
+            border: 1px solid #e2e0da;
+            border-radius: 6px
+        }
+
+        .threshold-row-label {
+            font-size: 9px;
+            color: #aaa;
+            margin-bottom: 3px
+        }
+
+        .threshold-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px
+        }
+
+        .threshold-chip {
+            font-size: 10px;
+            padding: 2px 7px;
+            border-radius: 10px;
+            font-weight: 500
+        }
+
+        .tc-green {
+            background: #d1fae5;
+            color: #065f46
+        }
+
+        .tc-red {
+            background: #fee2e2;
+            color: #991b1b
+        }
+
+        .tc-blue {
+            background: #eef0ff;
+            color: #5b6cf8
+        }
+
+        .tc-purple {
+            background: #f7f0ff;
+            color: #9b59c3
+        }
+
+        .tc-yellow {
+            background: #fef3c7;
+            color: #92400e
+        }
+
+        /* Code block */
+        .code-block {
+            background: #f5f4f1;
+            border: 1px solid #e2e0da;
+            border-radius: 8px;
+            padding: 12px;
+            font-family: 'DM Mono', 'Fira Code', monospace;
+            font-size: 11px;
+            line-height: 1.6;
+            color: #555;
+            white-space: pre;
+            overflow-x: auto;
+            margin-bottom: 10px
+        }
+
+        .code-block .kw {
+            color: #9b59c3
+        }
+
+        .code-block .fn {
+            color: #5b6cf8
+        }
+
+        .code-block .str {
+            color: #3dbf9e
+        }
+
+        .code-block .num {
+            color: #d97706
+        }
+
+        .code-block .cm {
+            color: #ccc
+        }
+
+        .code-export-actions {
+            display: flex;
+            gap: 6px;
+            margin-bottom: 10px
+        }
+
+        /* Stats */
+        .stat-row {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+            margin-bottom: 14px
+        }
+
+        .stat-box {
+            background: #fff;
+            border: 1px solid #e2e0da;
+            border-radius: 8px;
+            padding: 10px;
+            text-align: center
+        }
+
+        .stat-num {
+            font-size: 20px;
+            font-weight: 700;
+            color: #5b6cf8
+        }
+
+        .stat-label {
+            font-size: 10px;
+            color: #aaa;
+            margin-top: 2px
+        }
+
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 200px;
+            color: #ccc;
+            gap: 8px
+        }
+
+        .empty-state .empty-icon {
+            font-size: 36px
+        }
+
+        .empty-state p {
+            font-size: 12px
+        }
+
+        /* Hand Gesture Diagram */
+        .gesture-diagram-wrap {
+            display: flex;
+            gap: 10px;
+            margin-top: 8px;
+            flex-wrap: wrap
+        }
+
+        .hand-diagram-box {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px
+        }
+
+        .hand-diagram-label {
+            font-size: 9px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: .4px;
+            color: #aaa
+        }
+
+        .hand-diagram-svg {
+            border-radius: 8px;
+            background: #111;
+            border: 1px solid #e2e0da
+        }
+
+        .gesture-diagram-section {
+            margin-top: 8px;
+            padding: 8px;
+            background: #f5f4f1;
+            border: 1px solid #e2e0da;
+            border-radius: 7px
+        }
+
+        .gesture-diagram-title {
+            font-size: 9px;
+            color: #aaa;
+            text-transform: uppercase;
+            letter-spacing: .4px;
+            margin-bottom: 6px
+        }
+
+        /* Import/Export panels */
+        .import-export-panel {
+            padding: 14px;
+            background: #fff;
+            border: 1px solid #e2e0da;
+            border-radius: 10px;
+            margin-bottom: 12px
+        }
+
+        .import-export-panel h4 {
+            font-size: 11px;
+            font-weight: 600;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: .5px;
+            margin-bottom: 8px
+        }
+
+        .import-export-panel p {
+            font-size: 11px;
+            color: #888;
+            margin-bottom: 8px;
+            line-height: 1.5
+        }
+
+        /* Confidence */
+        .confidence-bar-wrap {
+            height: 3px;
+            background: #e2e0da;
+            border-radius: 2px;
+            overflow: hidden;
+            margin-top: 4px
+        }
+
+        .confidence-bar {
+            height: 100%;
+            border-radius: 2px;
+            transition: width .25s ease-out, background .25s
+        }
+
+        .conf-high {
+            background: #3dbf9e
+        }
+
+        .conf-med {
+            background: #d97706
+        }
+
+        .conf-low {
+            background: #dc2626
+        }
+
+        .gesture-badge {
+            font-size: 10px;
+            font-weight: 700;
+            color: #aaa;
+            flex-shrink: 0;
+            min-width: 38px;
+            text-align: right
+        }
+
+        .gesture-badge.pct-high {
+            color: #3dbf9e
+        }
+
+        .gesture-badge.pct-med {
+            color: #d97706
+        }
+
+        .gesture-badge.pct-low {
+            color: #dc2626
+        }
+
+        .similar-tag {
+            font-size: 8px;
+            color: #9b59c3;
+            background: #f7f0ff;
+            border: 1px solid #d8b4f8;
+            border-radius: 3px;
+            padding: 1px 5px;
+            margin-top: 2px;
+            display: inline-block
+        }
+
+        .gesture-card.top-match {
+            border-color: #3dbf9e !important;
+            background: #f0fdf8 !important;
+            box-shadow: 0 0 0 1px #3dbf9e22
+        }
+
+        .gesture-card.below-threshold {
+            opacity: 0.4
+        }
+
+        .top-rank-pill {
+            font-size: 8px;
+            background: #d1fae5;
+            color: #065f46;
+            border-radius: 3px;
+            padding: 1px 5px;
+            font-weight: 700;
+            flex-shrink: 0
+        }
+
+        /* Toast */
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 10px 16px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 500;
+            z-index: 9999;
+            opacity: 0;
+            transform: translateY(10px);
+            transition: all .25s;
+            pointer-events: none
+        }
+
+        .toast.show {
+            opacity: 1;
+            transform: translateY(0)
+        }
+
+        .toast.success {
+            background: #d1fae5;
+            color: #065f46;
+            border: 1px solid #6ee7b7
+        }
+
+        .toast.error {
+            background: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #fca5a5
+        }
+
+        .toast.info {
+            background: #eef0ff;
+            color: #5b6cf8;
+            border: 1px solid #c7cdfb
+        }
+
+        /* outputConfWrap override agar sesuai tema terang */
+        #outputConfWrap {
+            background: #e2e0da !important
+        }
+
+        @media(max-width:900px) {
+            .body-row {
+                flex-direction: column;
+                overflow-y: auto
+            }
+
+            .sidebar {
+                width: 100%;
+                height: auto;
+                border-left: none;
+                border-top: 1px solid #e2e0da
+            }
+
+            html,
+            body {
+                overflow: auto
+            }
+
+            .shell {
+                height: auto
+            }
+
+            .camera-area {
+                flex-direction: column
+            }
+
+            .output-panel {
+                width: 100%
+            }
+
+            .gen-layout {
+                flex-direction: column
+            }
+
+            .gen-left {
+                width: 100%;
+                border-right: none;
+                border-bottom: 1px solid #e2e0da
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="shell">
+        <header>
+            <h1>BISINDO</h1>
+            <span class="fps-tag" id="fpsLabel">0 fps</span>
+            <div class="tab-bar">
+                <!-- <button class="tab-btn active" onclick="switchTab('detector')">🎥 Detektor</button>
+                <button class="tab-btn" onclick="switchTab('generator')">⚡ Generator</button> -->
+            </div>
+        </header>
+
+        <!-- ═══════════════ DETECTOR TAB ═══════════════ -->
+        <div class="tab-panel active" id="tab-detector">
+            <div class="body-row">
+                <div class="video-col">
+                    <div class="camera-area">
+                        <div class="canvas-wrapper">
+                            <video id="inputVideo" playsinline></video>
+                            <canvas id="outputCanvas" width="640" height="480"></canvas>
+                            <div id="loadingOverlay">
+                                <div class="spinner"></div>
+                                <p id="loadingMsg">Memuat MediaPipe Holistic...</p>
+                            </div>
+                        </div>
+                        <div class="output-panel">
+                            <div class="output-section-label">Terdeteksi</div>
+                            <div class="output-main" id="outputMain">—</div>
+                            <div id="outputConfWrap"
+                                style="height:4px;background:#e2e0da;border-radius:2px;overflow:hidden;margin:4px 0 2px">
+                                <div id="outputConfBar"
+                                    style="height:100%;width:0%;background:#3dbf9e;border-radius:2px;transition:width .3s,background .3s">
+                                </div>
+                            </div>
+                            <div class="output-desc" id="outputDesc">Belum ada gestur</div>
+                            <div class="output-divider"></div>
+                            <div class="output-section-label">Riwayat</div>
+                            <div class="history-list" id="historyList"><span class="history-empty">Kosong</span></div>
+                        </div>
+                    </div>
+
+                    <div class="controls">
+                        <button id="startBtn" disabled>Mulai Kamera</button>
+                        <button id="stopBtn" disabled>Stop</button>
+                        <button id="ttsBtn" class="tts-on" onclick="toggleTTS()">🔊 Suara: ON</button>
+                        <button class="btn-sm" onclick="refreshJSON()">Refresh</button>
+                    </div>
+
+                    <div class="hand-display">
+                        <div class="hand-panel">
+                            <div class="hand-panel-header">Tangan Kanan <span class="orient-tag tag-none"
+                                    id="rhOrientTag">—</span></div>
+                            <div class="finger-row">
+                                <div class="finger-box" id="fR0">
+                                    <div class="finger-icon"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor"
+                                            stroke-width="1.4" stroke-linecap="round">
+                                            <path d="M7 12V5M5 12V7M3 12V8.5M9 12V7M11 12V8.5" />
+                                        </svg></div>
+                                    <div class="fn">Ibu</div>
+                                    <div class="fs">—</div>
+                                </div>
+                                <div class="finger-box" id="fR1">
+                                    <div class="finger-icon"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor"
+                                            stroke-width="1.4" stroke-linecap="round">
+                                            <path d="M7 12V3" />
+                                        </svg></div>
+                                    <div class="fn">Telunjuk</div>
+                                    <div class="fs">—</div>
+                                </div>
+                                <div class="finger-box" id="fR2">
+                                    <div class="finger-icon"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor"
+                                            stroke-width="1.4" stroke-linecap="round">
+                                            <path d="M7 12V2.5" />
+                                        </svg></div>
+                                    <div class="fn">Tengah</div>
+                                    <div class="fs">—</div>
+                                </div>
+                                <div class="finger-box" id="fR3">
+                                    <div class="finger-icon"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor"
+                                            stroke-width="1.4" stroke-linecap="round">
+                                            <path d="M7 12V3.5" />
+                                        </svg></div>
+                                    <div class="fn">Manis</div>
+                                    <div class="fs">—</div>
+                                </div>
+                                <div class="finger-box" id="fR4">
+                                    <div class="finger-icon"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor"
+                                            stroke-width="1.4" stroke-linecap="round">
+                                            <path d="M7 12V5" />
+                                        </svg></div>
+                                    <div class="fn">Kelingking</div>
+                                    <div class="fs">—</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="hand-panel">
+                            <div class="hand-panel-header">Tangan Kiri <span class="orient-tag tag-none"
+                                    id="lhOrientTag">—</span></div>
+                            <div class="finger-row">
+                                <div class="finger-box" id="fL0">
+                                    <div class="finger-icon"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor"
+                                            stroke-width="1.4" stroke-linecap="round">
+                                            <path d="M7 12V5M5 12V7M3 12V8.5M9 12V7M11 12V8.5" />
+                                        </svg></div>
+                                    <div class="fn">Ibu</div>
+                                    <div class="fs">—</div>
+                                </div>
+                                <div class="finger-box" id="fL1">
+                                    <div class="finger-icon"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor"
+                                            stroke-width="1.4" stroke-linecap="round">
+                                            <path d="M7 12V3" />
+                                        </svg></div>
+                                    <div class="fn">Telunjuk</div>
+                                    <div class="fs">—</div>
+                                </div>
+                                <div class="finger-box" id="fL2">
+                                    <div class="finger-icon"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor"
+                                            stroke-width="1.4" stroke-linecap="round">
+                                            <path d="M7 12V2.5" />
+                                        </svg></div>
+                                    <div class="fn">Tengah</div>
+                                    <div class="fs">—</div>
+                                </div>
+                                <div class="finger-box" id="fL3">
+                                    <div class="finger-icon"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor"
+                                            stroke-width="1.4" stroke-linecap="round">
+                                            <path d="M7 12V3.5" />
+                                        </svg></div>
+                                    <div class="fn">Manis</div>
+                                    <div class="fs">—</div>
+                                </div>
+                                <div class="finger-box" id="fL4">
+                                    <div class="finger-icon"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor"
+                                            stroke-width="1.4" stroke-linecap="round">
+                                            <path d="M7 12V5" />
+                                        </svg></div>
+                                    <div class="fn">Kelingking</div>
+                                    <div class="fs">—</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="legends-wrap">
+                        <div class="legend-row">
+                            <div class="legend-dot" style="background:#00c8e0"></div>Wajah
+                        </div>
+                        <div class="legend-row">
+                            <div class="legend-dot" style="background:#f87171"></div>Tangan kanan
+                        </div>
+                        <div class="legend-row">
+                            <div class="legend-dot" style="background:#fbbf24"></div>Tangan kiri
+                        </div>
+                        <div class="legend-row">
+                            <div class="legend-dot" style="background:#34d399"></div>Pose badan
+                        </div>
+                    </div>
+                </div>
+
+                <div class="sidebar">
+                    <div class="sidebar-scroll">
+                        <div class="sidebar-section">
+                            <h3>Status Deteksi</h3>
+                            <div class="detect-card">
+                                <div class="detect-indicator" id="faceInd"></div>
+                                <div class="info">
+                                    <div class="label">Wajah</div>
+                                    <div class="sub" id="faceSub">Belum terdeteksi</div>
+                                </div>
+                            </div>
+                            <div class="detect-card">
+                                <div class="detect-indicator" id="rightHandInd"></div>
+                                <div class="info">
+                                    <div class="label">Tangan Kanan</div>
+                                    <div class="sub" id="rightHandSub">Belum terdeteksi</div>
+                                </div>
+                            </div>
+                            <div class="detect-card">
+                                <div class="detect-indicator" id="leftHandInd"></div>
+                                <div class="info">
+                                    <div class="label">Tangan Kiri</div>
+                                    <div class="sub" id="leftHandSub">Belum terdeteksi</div>
+                                </div>
+                            </div>
+                            <div class="detect-card">
+                                <div class="detect-indicator" id="poseInd"></div>
+                                <div class="info">
+                                    <div class="label">Pose Badan</div>
+                                    <div class="sub" id="poseSub">Belum terdeteksi</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="sidebar-section" id="generatedSection" style="display:none">
+                            <h3>🔮 Gesture BISINDO</h3>
+                            <div style="font-size:9px;color:#ccc;margin-bottom:6px;font-style:italic">Threshold: 70%
+                                · diurutkan otomatis</div>
+                            <div class="gesture-grid" id="generatedGestureGrid"></div>
+                        </div>
+                        <div class="sidebar-section">
+                            <h3>Pose Landmark</h3>
+                            <div class="landmark-list">
+                                <div class="landmark-row"><span class="lname">Hidung</span><span class="lval"
+                                        id="lNose">—</span></div>
+                                <div class="landmark-row"><span class="lname">Bahu Kiri</span><span class="lval"
+                                        id="lShoulderL">—</span></div>
+                                <div class="landmark-row"><span class="lname">Bahu Kanan</span><span class="lval"
+                                        id="lShoulderR">—</span></div>
+                                <div class="landmark-row"><span class="lname">Siku Kiri</span><span class="lval"
+                                        id="lElbowL">—</span></div>
+                                <div class="landmark-row"><span class="lname">Siku Kanan</span><span class="lval"
+                                        id="lElbowR">—</span></div>
+                                <div class="landmark-row"><span class="lname">Pergelangan Kiri</span><span class="lval"
+                                        id="lWristL">—</span></div>
+                                <div class="landmark-row"><span class="lname">Pergelangan Kanan</span><span class="lval"
+                                        id="lWristR">—</span></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ═══════════════ GENERATOR TAB ═══════════════ -->
+        <div class="tab-panel" id="tab-generator">
+            <div class="gen-layout">
+
+                <!-- Left: File Manager -->
+                <div class="gen-left">
+                    <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
+                        <div class="upload-icon">📂</div>
+                        <div class="upload-title">Upload Foto Gesture</div>
+                        <div class="upload-sub">AYAH_1.jpg, AYAH_2.jpg → gesture AYAH<br>Drag & drop atau klik di sini
+                        </div>
+                        <input type="file" id="fileInput" multiple accept="image/*">
+                    </div>
+
+                    <div class="file-list-header">
+                        <span id="fileCountLabel">0 file · 0 gesture</span>
+                        <div style="display:flex;gap:4px">
+                            <button class="btn-sm" onclick="clearAllFiles()">Hapus Semua</button>
+                        </div>
+                    </div>
+
+                    <div class="file-scroll" id="fileListContainer">
+                        <div class="empty-state">
+                            <div class="empty-icon">🖼️</div>
+                            <p>Upload foto untuk memulai</p>
+                        </div>
+                    </div>
+
+                    <div class="progress-wrap">
+                        <div class="progress-label">
+                            <span id="progressText">Siap</span>
+                            <span id="progressCount">0/0</span>
+                        </div>
+                        <div class="progress-bar-bg">
+                            <div class="progress-bar-fill" id="progressBar"></div>
+                        </div>
+                        <div class="action-row">
+                            <button class="btn-sm primary" id="btnExtract" onclick="startExtraction()" disabled>⚡
+                                Ekstrak Landmark</button>
+                            <button class="btn-sm purple" id="btnGenerate" onclick="generateGestures()" disabled>🔮
+                                Generate Kode</button>
+                            <button class="btn-sm" onclick="refreshJSON()">Refresh</button>
+                            <button class="btn-sm" id="btnExportJSON" onclick="exportJSON()" disabled>📤 Export
+                                JSON</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right: Output Panels -->
+                <div class="gen-right">
+                    <div class="gen-tabs">
+                        <button class="gen-tab active" onclick="switchGenTab('preview')">🖼️ Preview</button>
+                        <button class="gen-tab" onclick="switchGenTab('extracted')">📊 Data Landmark</button>
+                        <button class="gen-tab" onclick="switchGenTab('code')">💻 Kode</button>
+                        <button class="gen-tab" onclick="switchGenTab('importexport')">📦 Import/Export</button>
+                    </div>
+
+                    <!-- Preview pane -->
+                    <div class="gen-pane active" id="genPane-preview">
+                        <div class="stat-row" id="previewStats" style="display:none">
+                            <div class="stat-box">
+                                <div class="stat-num" id="statTotal">0</div>
+                                <div class="stat-label">Total Foto</div>
+                            </div>
+                            <div class="stat-box">
+                                <div class="stat-num" id="statGestures">0</div>
+                                <div class="stat-label">Gesture</div>
+                            </div>
+                            <div class="stat-box">
+                                <div class="stat-num" id="statExtracted">0</div>
+                                <div class="stat-label">Terekstrak</div>
+                            </div>
+                            <div class="stat-box">
+                                <div class="stat-num" id="statDuplicates">0</div>
+                                <div class="stat-label">Duplikat</div>
+                            </div>
+                        </div>
+                        <div class="preview-grid" id="previewGrid">
+                            <div class="empty-state" style="grid-column:1/-1;height:300px">
+                                <div class="empty-icon">🖼️</div>
+                                <p>Upload foto untuk melihat preview</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Extracted data pane -->
+                    <div class="gen-pane" id="genPane-extracted">
+                        <div class="empty-state" id="extractedEmpty" style="height:300px">
+                            <div class="empty-icon">📊</div>
+                            <p>Jalankan ekstraksi landmark terlebih dahulu</p>
+                        </div>
+                        <div id="extractedContent"></div>
+                    </div>
+
+                    <!-- Code pane -->
+                    <div class="gen-pane" id="genPane-code">
+                        <div class="empty-state" id="codeEmpty" style="height:300px">
+                            <div class="empty-icon">💻</div>
+                            <p>Generate kode setelah ekstraksi selesai</p>
+                        </div>
+                        <div id="codeContent" style="display:none">
+                            <div class="code-export-actions">
+                                <button class="btn-sm primary" onclick="copyCode()">📋 Copy Semua Kode</button>
+                                <button class="btn-sm" onclick="applyGeneratedGestures()">✅ Terapkan ke
+                                    Detektor</button>
+                            </div>
+                            <div id="codeBlocks"></div>
+                        </div>
+                    </div>
+
+                    <!-- Import/Export pane -->
+                    <div class="gen-pane" id="genPane-importexport">
+                        <div class="import-export-panel">
+                            <h4>📤 Export Gesture Database</h4>
+                            <p>Export semua data landmark dan konfigurasi gesture ke file JSON. Bisa di-import kembali
+                                nanti.</p>
+                            <div style="display:flex;gap:6px;flex-wrap:wrap">
+                                <button class="btn-sm primary" onclick="exportJSON()">Export JSON Lengkap</button>
+                                <button class="btn-sm" onclick="exportCodeOnly()">Export Kode JS Saja</button>
+                            </div>
+                        </div>
+                        <div class="import-export-panel">
+                            <h4>📥 Import Gesture Database</h4>
+                            <p>Import file JSON yang sebelumnya di-export. Gesture yang sudah ada akan digabungkan atau
+                                ditimpa.</p>
+                            <div style="display:flex;gap:6px;flex-wrap:wrap">
+                                <button class="btn-sm primary" onclick="refreshJSON()">Refresh</button>
+                                <button class="btn-sm" onclick="clearSavedData()">Hapus Data Tersimpan</button>
+                            </div>
+                        </div>
+                        <div class="import-export-panel">
+                            <h4>📂 Import Kode JS</h4>
+                            <p>Import langsung file <code>.js</code> hasil generator. Fungsi <code>detectX()</code> akan
+                                di-parse dan langsung diterapkan ke detektor tanpa perlu generate ulang.</p>
+                            <div style="display:flex;gap:6px;flex-wrap:wrap">
+                                <button class="btn-sm primary" onclick="importJS()">Import File JS</button>
+                            </div>
+                        </div>
+                        <div class="import-export-panel">
+                            <h4>💾 Auto-Save (localStorage)</h4>
+                            <p id="localStorageStatus">Mengecek data tersimpan...</p>
+                            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
+                                <button class="btn-sm" onclick="saveToLocalStorage()">Simpan Sekarang</button>
+                                <button class="btn-sm" onclick="loadFromLocalStorage()">Muat Tersimpan</button>
+                                <button class="btn-sm danger" onclick="clearLocalStorage()">Hapus Cache</button>
+                                <button class="btn-sm" onclick="applyGeneratedGestures()">✅ Terapkan ke
+                                    Detektor</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div class="toast" id="toast"></div>
+
+    <!-- Hidden canvas for image processing -->
+    <canvas id="offscreenCanvas" style="display:none"></canvas>
+    <input type="file" id="importInput" accept=".json" style="display:none">
+    <input type="file" id="importJSInput" accept=".js" style="display:none">
+
+    <script>
+        // ══════════════════════════════════════════════════════════
+        //   SHARED CONSTANTS & UTILITIES
+        // ══════════════════════════════════════════════════════════
+        const FINGER_TIPS = [4, 8, 12, 16, 20], FINGER_PIP = [3, 6, 10, 14, 18];
+        const HAND_CONN = [[0, 1], [1, 2], [2, 3], [3, 4], [0, 5], [5, 6], [6, 7], [7, 8], [0, 9], [9, 10], [10, 11], [11, 12], [0, 13], [13, 14], [14, 15], [15, 16], [0, 17], [17, 18], [18, 19], [19, 20], [5, 9], [9, 13], [13, 17]];
+        const FACE_OVAL = [10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136, 172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109];
+        const POSE_CONN = [[11, 12], [11, 13], [13, 15], [12, 14], [14, 16], [11, 23], [12, 24], [23, 24], [23, 25], [24, 26], [25, 27], [26, 28]];
+        const COOLDOWN_FRAMES = 8;
+
+        function d2(a, b) { return Math.hypot(a.x - b.x, a.y - b.y) }
+        function validHand(lms) { return Array.isArray(lms) && lms.length === 21 && lms[0] != null }
+        function extended(lms, f) {
+            if (!lms) return false;
+            const tip = lms[FINGER_TIPS[f]], pip = lms[FINGER_PIP[f]], wrist = lms[0];
+            if (!tip || !pip || !wrist) return false;
+            if (f === 0) { const mcp = lms[2]; if (!mcp) return false; return d2(tip, wrist) > d2(mcp, wrist) * 1.3 }
+            return d2(tip, wrist) > d2(pip, wrist);
+        }
+        function countExtended(lms) { let n = 0; for (let i = 0; i < 5; i++)if (extended(lms, i)) n++; return n }
+        function fmt(lm) { return lm ? `${lm.x.toFixed(2)},${lm.y.toFixed(2)}` : '—' }
+
+        function showToast(msg, type = 'info') {
+            const t = document.getElementById('toast');
+            t.textContent = msg; t.className = `toast ${type} show`;
+            setTimeout(() => t.classList.remove('show'), 2500);
+        }
+
+        // ══════════════════════════════════════════════════════════
+        //   TAB SWITCHING
+        // ══════════════════════════════════════════════════════════
+        function switchTab(name) {
+            document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById(`tab-${name}`).classList.add('active');
+            event.currentTarget.classList.add('active');
+        }
+        function switchGenTab(name) {
+            document.querySelectorAll('.gen-pane').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.gen-tab').forEach(b => b.classList.remove('active'));
+            document.getElementById(`genPane-${name}`).classList.add('active');
+            event.currentTarget.classList.add('active');
+        }
+
+        // ══════════════════════════════════════════════════════════
+        //   DETECTOR LOGIC
+        // ══════════════════════════════════════════════════════════
+        let holistic, camera, running = false, frameCount = 0, lastTime = 0;
+        const canvas = document.getElementById('outputCanvas'), ctx = canvas.getContext('2d');
+        const video = document.getElementById('inputVideo');
+        const cooldowns = {};
+        const history = [];
+
+        // ══════════════════════════════════════════════════════════
+        //   TTS ENGINE — Web Speech API
+        // ══════════════════════════════════════════════════════════
+        const tts = window.speechSynthesis;
+        let ttsEnabled = true;          // dapat di-toggle oleh pengguna
+        let ttsCooldown = 0;            // frame-based cooldown antar ucapan
+        const TTS_COOLDOWN = 45;        // ~45 frame ≈ 1.5 detik pada 30fps
+        let _lastSpoken = '';           // hindari mengulang kalimat yang sama terus-menerus
+
+        /** Toggle TTS on/off dan update tampilan tombol */
+        function toggleTTS() {
+            ttsEnabled = !ttsEnabled;
+            const btn = document.getElementById('ttsBtn');
+            if (ttsEnabled) {
+                btn.textContent = '🔊 Suara: ON';
+                btn.className = 'tts-on';
+                if (tts) tts.cancel();
+            } else {
+                btn.textContent = '🔇 Suara: OFF';
+                btn.className = 'tts-off';
+                if (tts) tts.cancel();
+            }
+        }
+
+        /** Internal: kirim teks ke speech synthesis */
+        function speakText(text) {
+            if (!tts || !ttsEnabled) return;
+            tts.cancel();
+            const utt = new SpeechSynthesisUtterance(text);
+            utt.lang = 'id-ID';
+            utt.rate = 0.95;
+            utt.pitch = 1;
+            utt.volume = 1;
+            tts.speak(utt);
+        }
+
+        /** Ucapkan satu nama gesture (dengan cooldown & deduplikasi) */
+        function speakGesture(name) {
+            if (!ttsEnabled || ttsCooldown > 0) return;
+            if (_lastSpoken === name) return;
+            _lastSpoken = name;
+            ttsCooldown = TTS_COOLDOWN;
+            speakText(name);
+        }
+
+        /**
+         * Ucapkan beberapa gesture yang terdeteksi bersamaan.
+         * Contoh: ["AYAH", "IBU"] → "AYAH dan IBU"
+         */
+        function speakGestureList(names) {
+            if (!ttsEnabled || ttsCooldown > 0) return;
+            const key = names.join('|');
+            if (_lastSpoken === key) return;
+            _lastSpoken = key;
+            ttsCooldown = TTS_COOLDOWN;
+            const phrase = names.join(' dan ');
+            speakText(phrase);
+        }
+
+        // Generated gestures runtime registry
+        let GENERATED_GESTURES = {};
+        let GENERATED_DESCS = {};
+
+        function getPalmOrientation(lms, isRight) {
+            const w = lms[0], m5 = lms[5], m17 = lms[17];
+            if (!w || !m5 || !m17) return 'unknown';
+            const cross = (m5.x - w.x) * (m17.y - w.y) - (m5.y - w.y) * (m17.x - w.x);
+            return isRight ? (cross < 0 ? 'palm' : 'back') : (cross > 0 ? 'palm' : 'back');
+        }
+        function updateOrientationUI(rh, lh) {
+            const rhTag = document.getElementById('rhOrientTag'), lhTag = document.getElementById('lhOrientTag');
+            if (rh) { const p = getPalmOrientation(rh, true) === 'palm'; rhTag.textContent = p ? 'Telapak' : 'Punggung'; rhTag.className = `orient-tag ${p ? 'tag-palm' : 'tag-back'}`; }
+            else { rhTag.textContent = '—'; rhTag.className = 'orient-tag tag-none'; }
+            if (lh) { const p = getPalmOrientation(lh, false) === 'palm'; lhTag.textContent = p ? 'Telapak' : 'Punggung'; lhTag.className = `orient-tag ${p ? 'tag-palm' : 'tag-back'}`; }
+            else { lhTag.textContent = '—'; lhTag.className = 'orient-tag tag-none'; }
+        }
+        function updateFingers(lms, side) {
+            const p = side === 'right' ? 'fR' : 'fL';
+            for (let i = 0; i < 5; i++) {
+                const b = document.getElementById(`${p}${i}`), s = b.querySelector('.fs');
+                if (!lms) { b.classList.remove('extended'); s.textContent = '—'; continue; }
+                const e = extended(lms, i); b.classList.toggle('extended', e); s.textContent = e ? 'Buka' : 'Tutup';
+            }
+        }
+        function setDotIndicator(id, on) { const el = document.getElementById(id); if (el) el.classList.toggle('active', on) }
+        function setGestureCard(name, detected) {
+            const card = document.getElementById('card-' + name), badge = document.getElementById('badge-' + name);
+            if (card) card.classList.toggle('detected', detected);
+            if (badge) badge.textContent = detected ? 'Ya' : '—';
+        }
+        function updateOutput(name, confidence) {
+            const pct = confidence != null ? Math.round(confidence * 100) : null;
+            document.getElementById('outputMain').textContent = name;
+            const desc = GENERATED_DESCS[name] || '';
+            const confStr = pct != null ? ` · ${pct}% confidence` : '';
+            document.getElementById('outputDesc').textContent = desc + confStr;
+            const bar = document.getElementById('outputConfBar');
+            if (bar && pct != null) {
+                bar.style.width = pct + '%';
+                bar.style.background = pct >= 70 ? '#22c55e' : pct >= 50 ? '#f59e0b' : '#ef4444';
+            }
+            const entry = pct != null ? `${name} (${pct}%)` : name;
+            history.unshift(entry);
+            if (history.length > 6) history.pop();
+            const hl = document.getElementById('historyList');
+            hl.innerHTML = history.length ? history.map(h => `<div class="history-item">${h}</div>`).join('') : '<span class="history-empty">Kosong</span>';
+        }
+
+        // Pose helpers
+        function wristAboveNose(pose, side) { const w = pose[side === 'right' ? 16 : 15], n = pose[0]; return w && n && w.visibility >= 0.4 && w.y < n.y }
+        function wristBelowShoulder(pose, side) { const w = pose[side === 'right' ? 16 : 15], s = pose[side === 'right' ? 12 : 11]; return w && s && w.visibility >= 0.3 && w.y > s.y + 0.05 }
+        function wristNearWaist(pose, side) { const w = pose[side === 'right' ? 16 : 15], s = pose[side === 'right' ? 12 : 11], h = pose[side === 'right' ? 24 : 23]; if (!w || !s || w.visibility < 0.3) return false; return w.y > s.y + 0.05 && w.y < (h ? h.y + 0.05 : s.y + 0.4) }
+        function thumbPinkyDist(lms) { const t = lms[4], p = lms[20]; return (t && p) ? d2(t, p) : 1 }
+
+        let _gestureFeatures = {};
+
+        // ══════════════════════════════════════════════════════════
+        //   SIMILARITY ENGINE
+        // ══════════════════════════════════════════════════════════
+        const SIMILARITY_THRESHOLD = 0.70;
+
+        function lmDist(a, b) {
+            return Math.hypot(a.x - b.x, a.y - b.y, (a.z || 0) - (b.z || 0));
+        }
+
+        function handPresenceMultiplier(feat, rh, lh) {
+            const lhPresent = validHand(lh);
+            const rhPresent = validHand(rh);
+            if (feat && feat.usesBothHands) {
+                if (!lhPresent || !rhPresent) return 0.0;
+                return 1.0;
+            } else {
+                if (lhPresent && rhPresent) return 0.0;
+                if (lhPresent && !feat.usesRightHand) return 1.0;
+                if (lhPresent) return 0.0;
+                return 1.0;
+            }
+        }
+
+        function interHandProximitySim(liveRH, liveLH, sampleRH, sampleLH) {
+            if (!liveRH || !liveLH || !sampleRH || !sampleLH) return 0.5;
+            const rhRefScale = lmDist(sampleRH[0], sampleRH[9]) || 0.1;
+            const sampleDists = [8, 12, 16].map(i => lmDist(sampleLH[8], sampleRH[i]) / rhRefScale);
+            const sampleMinDist = Math.min(...sampleDists);
+            const lhRefScale = lmDist(liveRH[0], liveRH[9]) || 0.1;
+            const liveDists = [8, 12, 16].map(i => lmDist(liveLH[8], liveRH[i]) / lhRefScale);
+            const liveMinDist = Math.min(...liveDists);
+            const diff = Math.abs(liveMinDist - sampleMinDist);
+            return Math.max(0, 1 - diff / 1.5);
+        }
+
+        function normalizeHand(lms) {
+            if (!lms || lms.length < 21) return null;
+            const wrist = lms[0];
+            const midMCP = lms[9];
+            const palmScale = Math.hypot(midMCP.x - wrist.x, midMCP.y - wrist.y) || 1;
+            return lms.map(l => ({
+                x: (l.x - wrist.x) / palmScale,
+                y: (l.y - wrist.y) / palmScale,
+                z: ((l.z || 0) - (wrist.z || 0)) / palmScale
+            }));
+        }
+
+        function landmarkSim(lmsA, lmsB) {
+            if (!lmsA || !lmsB) return 0;
+            const nA = normalizeHand(lmsA), nB = normalizeHand(lmsB);
+            if (!nA || !nB) return 0;
+            let dist = 0;
+            for (let i = 0; i < 21; i++) {
+                dist += Math.hypot(nA[i].x - nB[i].x, nA[i].y - nB[i].y, nA[i].z - nB[i].z);
+            }
+            return Math.max(0, 1 - dist / 12);
+        }
+
+        function fingerVecSim(lmsA, lmsB) {
+            if (!lmsA || !lmsB) return 0.5;
+            const vecA = [0, 1, 2, 3, 4].map(i => extended(lmsA, i) ? 1 : 0);
+            const vecB = [0, 1, 2, 3, 4].map(i => extended(lmsB, i) ? 1 : 0);
+            const weights = [0.25, 0.25, 0.20, 0.15, 0.15];
+            let score = 0;
+            for (let i = 0; i < 5; i++) {
+                if (vecA[i] === vecB[i]) score += weights[i];
+            }
+            return score;
+        }
+
+        function orientSim(lmsA, lmsB, isRight) {
+            const oA = getPalmOrientation(lmsA, isRight);
+            const oB = getPalmOrientation(lmsB, isRight);
+            return oA === oB ? 1 : 0.3;
+        }
+
+        function tpDistSim(lmsA, lmsB) {
+            if (!lmsA || !lmsB) return 0.5;
+            const dA = thumbPinkyDist(lmsA), dB = thumbPinkyDist(lmsB);
+            return Math.max(0, 1 - Math.abs(dA - dB) / 0.4);
+        }
+
+        function poseSim(poseA, poseB, feat) {
+            if (!poseA || !poseB) return feat && feat.usesPose ? 0 : 1;
+            const side = feat && feat.usesRightHand ? 'right' : 'left';
+            const wIdx = side === 'right' ? 16 : 15;
+            const wA = poseA[wIdx], wB = poseB[wIdx];
+            if (!wA || !wB) return 0.5;
+            const dY = Math.abs(wA.y - wB.y);
+            return Math.max(0, 1 - dY / 0.3);
+        }
+
+        function handShapeScore(liveHand, sampleHand, isRight) {
+            if (!liveHand || !sampleHand) return 0;
+            return landmarkSim(liveHand, sampleHand) * 0.30 +
+                fingerVecSim(liveHand, sampleHand) * 0.45 +
+                orientSim(liveHand, sampleHand, isRight) * 0.15 +
+                tpDistSim(liveHand, sampleHand) * 0.10;
+        }
+
+        function computeGestureSimilarity(name, rh, lh, face, pose) {
+            const feat = _gestureFeatures[name];
+            const fn = GENERATED_GESTURES[name];
+            if (!fn) return 0;
+            const presenceMult = handPresenceMultiplier(feat, rh, lh);
+            if (presenceMult === 0.0) return 0;
+            const dbEntry = gestureDB[name];
+            if (!dbEntry || !dbEntry.samples || dbEntry.samples.length === 0) {
+                let detected = false;
+                try { detected = fn(rh, lh, face, pose) } catch (e) { }
+                return (detected ? 1.0 : 0.0) * presenceMult;
+            }
+            let boolPass = false;
+            try { boolPass = fn(rh, lh, face, pose) } catch (e) { }
+            let bestScore = 0;
+            for (const sample of dbEntry.samples) {
+                const slm = sample.landmarks;
+                if (!slm) continue;
+                let score = 0, weights = 0;
+                const isRight = !feat || feat.usesRightHand !== false;
+                if (feat && feat.usesBothHands) {
+                    if (rh && slm.rightHand) { score += handShapeScore(rh, slm.rightHand, true) * 0.40; weights += 0.40; }
+                    if (lh && slm.leftHand) { score += handShapeScore(lh, slm.leftHand, false) * 0.30; weights += 0.30; }
+                    const proxSim = interHandProximitySim(rh, lh, slm.rightHand, slm.leftHand);
+                    score += proxSim * 0.30; weights += 0.30;
+                } else {
+                    const liveHand = isRight ? rh : lh;
+                    const sampleHand = isRight ? slm.rightHand : slm.leftHand;
+                    if (liveHand && sampleHand) { score += handShapeScore(liveHand, sampleHand, isRight); weights += 1; }
+                    else if (!liveHand && !sampleHand) { score += 0.5; weights += 1; }
+                    else { score += 0; weights += 1; }
+                }
+                if (feat && feat.usesPose && slm.pose) {
+                    const ps = poseSim(pose, slm.pose, feat);
+                    score += ps * 0.12; weights += 0.12;
+                }
+                const normalized = weights > 0 ? score / weights : 0;
+                let finalScore = boolPass ? normalized : Math.min(normalized, 0.55);
+                finalScore *= presenceMult;
+                if (finalScore > bestScore) bestScore = finalScore;
+            }
+            return Math.min(1, bestScore);
+        }
+
+        function findSimilarGestures(scores, name) {
+            const myScore = scores[name];
+            if (myScore < SIMILARITY_THRESHOLD) return [];
+            return Object.entries(scores)
+                .filter(([n, s]) => n !== name && s >= SIMILARITY_THRESHOLD && Math.abs(s - myScore) <= 0.06)
+                .map(([n]) => n);
+        }
+
+        // ── processGestures: Similarity-based confidence scoring ──
+        function processGestures(rh, lh, face, pose) {
+            const names = Object.keys(GENERATED_GESTURES);
+            if (names.length === 0) return;
+
+            const scores = {};
+            for (const name of names) {
+                scores[name] = computeGestureSimilarity(name, rh, lh, face, pose);
+            }
+
+            const sorted = [...names].sort((a, b) => scores[b] - scores[a]);
+            const topName = sorted[0];
+            const topScore = scores[topName] || 0;
+
+            sorted.forEach((name, rank) => {
+                const conf = scores[name];
+                const pct = Math.round(conf * 100);
+                const isValid = conf >= SIMILARITY_THRESHOLD;
+                const isTop = rank === 0 && isValid;
+
+                const card = document.getElementById('card-' + name);
+                const badge = document.getElementById('badge-' + name);
+                const cbar = document.getElementById('cbar-' + name);
+                const dot = document.getElementById('dot-' + name);
+                const rankpill = document.getElementById('rankpill-' + name);
+                const simtag = document.getElementById('simtag-' + name);
+
+                if (card) {
+                    card.classList.toggle('top-match', isTop);
+                    card.classList.toggle('detected', isValid);
+                    card.classList.toggle('below-threshold', !isValid && conf < 0.4);
+                }
+                if (badge) {
+                    badge.textContent = conf > 0.01 ? pct + '%' : '—';
+                    badge.className = 'gesture-badge' + (conf >= 0.7 ? ' pct-high' : conf >= 0.5 ? ' pct-med' : conf >= 0.3 ? ' pct-low' : '');
+                }
+                if (cbar) {
+                    const cls = conf >= 0.7 ? 'conf-high' : conf >= 0.5 ? 'conf-med' : 'conf-low';
+                    cbar.style.width = pct + '%';
+                    cbar.className = 'confidence-bar ' + cls;
+                }
+                if (dot) {
+                    dot.style.background = isTop ? '#22c55e' : isValid ? '#3b82f6' : conf >= 0.4 ? '#7c3aed' : '#1e2535';
+                }
+                if (rankpill) {
+                    rankpill.style.display = isTop ? 'inline-block' : 'none';
+                }
+                if (simtag) {
+                    const similars = findSimilarGestures(scores, name);
+                    if (similars.length > 0 && isValid) {
+                        simtag.style.display = 'inline-block';
+                        simtag.textContent = '≈ mirip: ' + similars.join(', ');
+                    } else {
+                        simtag.style.display = 'none';
+                    }
+                }
+            });
+
+            // Re-sort DOM cards by score
+            const grid = document.getElementById('generatedGestureGrid');
+            if (grid) {
+                sorted.forEach(name => {
+                    const card = document.getElementById('card-' + name);
+                    if (card) grid.appendChild(card);
+                });
+            }
+
+            // Output top gesture if above threshold AND clearly better than #2
+            if (topScore >= SIMILARITY_THRESHOLD) {
+                const secondScore = sorted.length > 1 ? (scores[sorted[1]] || 0) : 0;
+                const margin = topScore - secondScore;
+                if (margin >= 0.05) {
+                    if ((cooldowns[topName] || 0) <= 0) {
+                        updateOutput(topName, topScore);
+                        cooldowns[topName] = COOLDOWN_FRAMES;
+                    }
+                }
+            }
+
+            // ── TTS: Kumpulkan semua gesture di atas threshold ──────
+            // Jika hanya satu → sebut namanya saja
+            // Jika lebih dari satu → sebut semua dengan "dan" di antaranya
+            const aboveThreshold = sorted.filter(n => scores[n] >= SIMILARITY_THRESHOLD);
+            if (aboveThreshold.length === 1) {
+                speakGesture(aboveThreshold[0]);
+            } else if (aboveThreshold.length > 1) {
+                speakGestureList(aboveThreshold);
+            }
+
+            // Decrement cooldowns
+            for (const name of names) {
+                if ((cooldowns[name] || 0) > 0) cooldowns[name]--;
+            }
+            // Decrement TTS cooldown setiap frame
+            if (ttsCooldown > 0) ttsCooldown--;
+        }
+
+        // Drawing
+        function drawDots(lms, color, r) { ctx.fillStyle = color; for (const lm of lms) { ctx.beginPath(); ctx.arc(lm.x * canvas.width, lm.y * canvas.height, r, 0, Math.PI * 2); ctx.fill() } }
+        function drawLines(lms, pairs, color, lw) { ctx.strokeStyle = color; ctx.lineWidth = lw; for (const [a, b] of pairs) { const A = lms[a], B = lms[b]; if (!A || !B) continue; ctx.beginPath(); ctx.moveTo(A.x * canvas.width, A.y * canvas.height); ctx.lineTo(B.x * canvas.width, B.y * canvas.height); ctx.stroke() } }
+        function drawFace(lms) {
+            if (!lms || !lms.length) return;
+            ctx.strokeStyle = 'rgba(0,200,224,0.25)'; ctx.lineWidth = 0.7; ctx.beginPath();
+            FACE_OVAL.forEach((i, idx) => { const l = lms[i]; if (!l) return; idx === 0 ? ctx.moveTo(l.x * canvas.width, l.y * canvas.height) : ctx.lineTo(l.x * canvas.width, l.y * canvas.height) });
+            ctx.stroke();
+            ctx.fillStyle = 'rgba(0,200,224,0.4)';
+            for (let i = 0; i < lms.length; i += 6) { const l = lms[i]; ctx.beginPath(); ctx.arc(l.x * canvas.width, l.y * canvas.height, 1, 0, Math.PI * 2); ctx.fill() }
+            ctx.fillStyle = '#00c8e0';
+            for (const i of [33, 133, 159, 145, 362, 263, 0, 17, 61, 291, 234, 454]) { const l = lms[i]; if (!l) continue; ctx.beginPath(); ctx.arc(l.x * canvas.width, l.y * canvas.height, 2.5, 0, Math.PI * 2); ctx.fill() }
+        }
+        function drawHand(lms, lineColor, dotColor, tipColor, label) {
+            drawLines(lms, HAND_CONN, lineColor, 1.5); drawDots(lms, dotColor, 2.5);
+            ctx.fillStyle = tipColor;
+            for (const i of FINGER_TIPS) { if (!lms[i]) continue; ctx.beginPath(); ctx.arc(lms[i].x * canvas.width, lms[i].y * canvas.height, 5, 0, Math.PI * 2); ctx.fill() }
+            if (lms[0]) { ctx.save(); ctx.font = '500 11px system-ui,sans-serif'; ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.lineWidth = 2.5; ctx.strokeText(label, lms[0].x * canvas.width + 6, lms[0].y * canvas.height + 4); ctx.fillStyle = dotColor; ctx.fillText(label, lms[0].x * canvas.width + 6, lms[0].y * canvas.height + 4); ctx.restore() }
+        }
+
+        function onResults(results) {
+            frameCount++;
+            const now = performance.now();
+            if (now - lastTime >= 1000) { document.getElementById('fpsLabel').textContent = `${frameCount} fps`; frameCount = 0; lastTime = now }
+            canvas.width = results.image.width; canvas.height = results.image.height;
+            ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.drawImage(results.image, 0, 0);
+            const face = results.faceLandmarks, rhRaw = results.rightHandLandmarks, lhRaw = results.leftHandLandmarks, pose = results.poseLandmarks;
+            const rh = validHand(rhRaw) ? rhRaw : null, lh = validHand(lhRaw) ? lhRaw : null;
+            const fD = !!(face && face.length > 0), rD = !!rh, lD = !!lh, pD = !!(pose && pose.length > 0);
+            if (fD) drawFace(face);
+            if (rD) drawHand(rh, 'rgba(248,113,113,0.7)', '#f87171', '#fca5a5', 'Kanan');
+            if (lD) drawHand(lh, 'rgba(251,191,36,0.7)', '#fbbf24', '#fde68a', 'Kiri');
+            if (pD) {
+                drawLines(pose, POSE_CONN, 'rgba(52,211,153,0.5)', 2);
+                ctx.fillStyle = '#34d399';
+                for (let i = 0; i <= 24; i++) { const lm = pose[i]; if (!lm || lm.visibility < 0.3) continue; ctx.beginPath(); ctx.arc(lm.x * canvas.width, lm.y * canvas.height, 3, 0, Math.PI * 2); ctx.fill() }
+                document.getElementById('lNose').textContent = fmt(pose[0]);
+                document.getElementById('lShoulderL').textContent = fmt(pose[11]);
+                document.getElementById('lShoulderR').textContent = fmt(pose[12]);
+                document.getElementById('lElbowL').textContent = fmt(pose[13]);
+                document.getElementById('lElbowR').textContent = fmt(pose[14]);
+                document.getElementById('lWristL').textContent = fmt(pose[15]);
+                document.getElementById('lWristR').textContent = fmt(pose[16]);
+            }
+            processGestures(rh, lh, fD ? face : null, pD ? pose : null);
+            updateOrientationUI(rh, lh); updateFingers(rh, 'right'); updateFingers(lh, 'left');
+            setDotIndicator('faceInd', fD); setDotIndicator('rightHandInd', rD); setDotIndicator('leftHandInd', lD); setDotIndicator('poseInd', pD);
+            const rhOri = rD ? getPalmOrientation(rh, true) : null, lhOri = lD ? getPalmOrientation(lh, false) : null;
+            document.getElementById('faceSub').textContent = fD ? `${face.length} titik` : 'Belum terdeteksi';
+            document.getElementById('rightHandSub').textContent = rD ? `21 titik · ${rhOri === 'palm' ? 'telapak' : 'punggung'}` : 'Belum terdeteksi';
+            document.getElementById('leftHandSub').textContent = lD ? `21 titik · ${lhOri === 'palm' ? 'telapak' : 'punggung'}` : 'Belum terdeteksi';
+            document.getElementById('poseSub').textContent = pD ? '33 titik' : 'Belum terdeteksi';
+        }
+
+        async function initHolistic() {
+            holistic = new Holistic({ locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${f}` });
+            holistic.setOptions({ modelComplexity: 1, smoothLandmarks: true, enableSegmentation: false, refineFaceLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+            holistic.onResults(onResults);
+            await holistic.initialize();
+            document.getElementById('loadingOverlay').style.display = 'none';
+            document.getElementById('startBtn').disabled = false;
+        }
+        async function startCamera() {
+            if (running) return; running = true;
+            document.getElementById('startBtn').disabled = true; document.getElementById('stopBtn').disabled = false;
+            try {
+                camera = new Camera(video, { onFrame: async () => { if (running && holistic) await holistic.send({ image: video }) }, width: 640, height: 480 });
+                await camera.start();
+            } catch (e) { running = false; document.getElementById('startBtn').disabled = false; document.getElementById('stopBtn').disabled = true }
+        }
+        function stopCamera() {
+            if (!running) return; running = false; if (camera) camera.stop();
+            document.getElementById('startBtn').disabled = false; document.getElementById('stopBtn').disabled = true;
+            if (tts) tts.cancel();
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            updateFingers(null, 'right'); updateFingers(null, 'left'); updateOrientationUI(null, null);
+            ['rightHandInd', 'leftHandInd', 'faceInd', 'poseInd'].forEach(id => setDotIndicator(id, false));
+            ['rightHandSub', 'leftHandSub', 'faceSub', 'poseSub'].forEach(id => document.getElementById(id).textContent = 'Belum terdeteksi');
+            document.getElementById('outputMain').textContent = '—'; document.getElementById('outputDesc').textContent = 'Kamera dimatikan';
+        }
+        document.getElementById('startBtn').addEventListener('click', startCamera);
+        document.getElementById('stopBtn').addEventListener('click', stopCamera);
+        initHolistic()
+            .then(() => refreshJSON())
+            .catch(e => { document.getElementById('loadingMsg').textContent = 'Gagal: ' + e.message });
+
+        // ══════════════════════════════════════════════════════════
+        //   GESTURE GENERATOR ENGINE
+        // ══════════════════════════════════════════════════════════
+        let genHolistic = null;
+        let fileRegistry = {};
+        let gestureDB = {};
+        let extractionQueue = [];
+        let isExtracting = false;
+        let generatedCode = '';
+
+        function parseGestureName(filename) {
+            const base = filename.replace(/\.[^.]+$/, '');
+            return base.replace(/[_\-\s]\d+$|[\s\-_]?\(\d+\)$|\d+$/, '').toUpperCase().trim().replace(/\s+/, '_');
+        }
+
+        async function hashBlob(blob) {
+            const buf = await blob.arrayBuffer();
+            const hashBuf = await crypto.subtle.digest('SHA-1', buf);
+            return Array.from(new Uint8Array(hashBuf)).map(b => b.toString(16).padStart(2, 0)).join('').slice(0, 16);
+        }
+
+        async function addFiles(files) {
+            const arr = Array.from(files);
+            for (const file of arr) {
+                if (!file.type.startsWith('image/')) continue;
+                const hash = await hashBlob(file);
+                const isDup = Object.values(fileRegistry).some(r => r.hash === hash && r.filename !== file.name);
+                const key = `${file.name}_${hash}`;
+                if (fileRegistry[key]) continue;
+                const dataUrl = await readFileAsDataUrl(file);
+                const gestureName = parseGestureName(file.name);
+                fileRegistry[key] = { file, filename: file.name, gestureName, dataUrl, hash, status: 'pending', landmarks: null, isDup, key };
+                if (!gestureDB[gestureName]) gestureDB[gestureName] = { samples: [], features: null };
+            }
+            renderFileList();
+            renderPreviewGrid();
+            updateStats();
+            updateActionButtons();
+            saveToLocalStorageSilent();
+        }
+
+        function readFileAsDataUrl(file) {
+            return new Promise((res, rej) => { const r = new FileReader(); r.onload = e => res(e.target.result); r.onerror = rej; r.readAsDataURL(file) });
+        }
+
+        function renderFileList() {
+            const container = document.getElementById('fileListContainer');
+            const groups = {};
+            for (const entry of Object.values(fileRegistry)) {
+                if (!groups[entry.gestureName]) groups[entry.gestureName] = [];
+                groups[entry.gestureName].push(entry);
+            }
+            if (Object.keys(groups).length === 0) {
+                container.innerHTML = `<div class="empty-state"><div class="empty-icon">🖼️</div><p>Upload foto untuk memulai</p></div>`;
+                return;
+            }
+            let html = '';
+            for (const [gName, entries] of Object.entries(groups)) {
+                const doneCount = entries.filter(e => e.status === 'done').length;
+                const hasError = entries.some(e => e.status === 'error');
+                const processing = entries.some(e => e.status === 'processing');
+                let statusClass = 'status-pending', statusText = 'Menunggu';
+                if (processing) { statusClass = 'status-processing'; statusText = 'Proses...' }
+                else if (doneCount === entries.length) { statusClass = 'status-done'; statusText = 'Selesai' }
+                else if (hasError) { statusClass = 'status-error'; statusText = 'Ada Error' }
+                html += `<div class="gesture-group">
+      <div class="gesture-group-header">
+        <span class="gesture-group-name">${gName}</span>
+        <span class="gesture-group-count">${entries.length} foto</span>
+        <span class="gesture-group-status ${statusClass}">${statusText}</span>
+      </div>`;
+                for (const e of entries) {
+                    const statusIcon = e.status === 'done' ? '<span class="fs-ok">✓</span>' : e.status === 'error' ? '<span class="fs-err">✗</span>' : e.isDup ? '<span class="fs-dup">≈dup</span>' : '<span class="fs-wait">⏳</span>';
+                    html += `<div class="file-item" id="fitem-${e.key}">
+        <img class="file-thumb" src="${e.dataUrl}" alt="">
+        <div class="file-info">
+          <div class="file-name" title="${e.filename}">${e.filename}</div>
+          <div class="file-meta">${e.gestureName} · ${formatBytes(e.file.size)}</div>
+        </div>
+        ${statusIcon}
+        <button class="file-remove" onclick="removeFile('${e.key}')">×</button>
+      </div>`;
+                }
+                html += '</div>';
+            }
+            container.innerHTML = html;
+            const totalFiles = Object.values(fileRegistry).length;
+            const totalGestures = Object.keys(groups).length;
+            document.getElementById('fileCountLabel').textContent = `${totalFiles} file · ${totalGestures} gesture`;
+        }
+
+        function renderPreviewGrid() {
+            const grid = document.getElementById('previewGrid');
+            const entries = Object.values(fileRegistry);
+            if (entries.length === 0) {
+                grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;height:300px"><div class="empty-icon">🖼️</div><p>Upload foto untuk melihat preview</p></div>`;
+                return;
+            }
+            grid.innerHTML = entries.map(e => `
+    <div class="preview-card ${e.isDup ? 'dup-card' : ''}">
+      <img src="${e.dataUrl}" alt="${e.gestureName}" loading="lazy">
+      <div class="preview-card-info">
+        <div class="preview-card-name">${e.gestureName}</div>
+        <div class="preview-card-label">${e.filename}</div>
+        ${e.isDup ? '<span class="badge-dup">duplikat</span>' : ''}
+        ${e.status === 'done' ? renderConfidenceBar(e) : ''}
+      </div>
+    </div>`).join('');
+        }
+
+        function renderConfidenceBar(e) {
+            if (!e.landmarks) return '';
+            const conf = e.landmarks.rightHand ? 0.9 : e.landmarks.leftHand ? 0.8 : 0.4;
+            const cls = conf > 0.8 ? 'conf-high' : conf > 0.5 ? 'conf-med' : 'conf-low';
+            return `<div class="confidence-bar-wrap"><div class="confidence-bar ${cls}" style="width:${(conf * 100).toFixed(0)}%"></div></div>`;
+        }
+
+        function formatBytes(b) { if (b < 1024) return b + 'B'; if (b < 1048576) return (b / 1024).toFixed(1) + 'KB'; return (b / 1048576).toFixed(1) + 'MB' }
+
+        function updateStats() {
+            const entries = Object.values(fileRegistry);
+            const total = entries.length;
+            const gestures = new Set(entries.map(e => e.gestureName)).size;
+            const extracted = entries.filter(e => e.status === 'done').length;
+            const dups = entries.filter(e => e.isDup).length;
+            document.getElementById('statTotal').textContent = total;
+            document.getElementById('statGestures').textContent = gestures;
+            document.getElementById('statExtracted').textContent = extracted;
+            document.getElementById('statDuplicates').textContent = dups;
+            document.getElementById('previewStats').style.display = total > 0 ? 'grid' : 'none';
+        }
+
+        function updateActionButtons() {
+            const total = Object.values(fileRegistry).length;
+            const extracted = Object.values(fileRegistry).filter(e => e.status === 'done').length;
+            document.getElementById('btnExtract').disabled = total === 0;
+            document.getElementById('btnGenerate').disabled = extracted === 0;
+            document.getElementById('btnExportJSON').disabled = extracted === 0;
+        }
+
+        function removeFile(key) {
+            const entry = fileRegistry[key];
+            if (!entry) return;
+            if (gestureDB[entry.gestureName]) {
+                gestureDB[entry.gestureName].samples = gestureDB[entry.gestureName].samples.filter(s => s.key !== key);
+                if (gestureDB[entry.gestureName].samples.length === 0) delete gestureDB[entry.gestureName];
+            }
+            delete fileRegistry[key];
+            renderFileList(); renderPreviewGrid(); updateStats(); updateActionButtons();
+        }
+
+        function clearAllFiles() {
+            fileRegistry = {}; gestureDB = {};
+            renderFileList(); renderPreviewGrid(); updateStats(); updateActionButtons();
+            document.getElementById('extractedContent').innerHTML = '';
+            document.getElementById('extractedEmpty').style.display = 'flex';
+            showToast('Semua file dihapus', 'info');
+        }
+
+        // ── Drag & drop ─────────────────────────────────────────
+        const uploadZone = document.getElementById('uploadZone');
+        uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag-over') });
+        uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
+        uploadZone.addEventListener('drop', e => { e.preventDefault(); uploadZone.classList.remove('drag-over'); addFiles(e.dataTransfer.files) });
+        document.getElementById('fileInput').addEventListener('change', e => addFiles(e.target.files));
+
+        function renderExtractedData() {
+            const container = document.getElementById('extractedContent');
+            const emptyEl = document.getElementById('extractedEmpty');
+            const doneSamples = Object.entries(gestureDB).filter(([, g]) => g.samples.some(s => fileRegistry[s.key]?.status === 'done'));
+            if (doneSamples.length === 0) { emptyEl.style.display = 'flex'; container.innerHTML = ''; return }
+            emptyEl.style.display = 'none';
+            let html = '';
+            for (const [gName, gData] of doneSamples) {
+                const validSamples = gData.samples.filter(s => fileRegistry[s.key]?.status === 'done');
+                if (validSamples.length === 0) continue;
+                const feat = analyzeFeatures(validSamples);
+                gData.features = feat;
+                const fingerNames = ['Ibu', 'Telunjuk', 'Tengah', 'Manis', 'Kelingking'];
+                const fingerChips = feat.fingers ? feat.fingers.map((e, i) => `<span class="threshold-chip ${e ? 'tc-green' : 'tc-red'}">${fingerNames[i]}: ${e ? 'Buka' : 'Tutup'}</span>`).join('') : '—';
+                const lhFingerChips = feat.lh_fingers ? feat.lh_fingers.map((e, i) => `<span class="threshold-chip ${e ? 'tc-green' : 'tc-red'}">${fingerNames[i]}: ${e ? 'Buka' : 'Tutup'}</span>`).join('') : null;
+                const dominanLabel = feat.usesBothHands ? '🤲 Dua Tangan' : feat.usesRightHand ? 'Kanan' : feat.usesLeftHand ? 'Kiri' : '?';
+                html += `<div class="extracted-gesture">
+      <div class="extracted-gesture-name">${gName} <span>${validSamples.length} sample</span>${feat.usesBothHands ? ' <span style="color:#a78bfa;font-size:10px;margin-left:4px">DUA TANGAN</span>' : ''}</div>
+      <div class="feature-row">
+        <div class="feature-chip"><div class="feature-chip-label">Mode Tangan</div><div class="feature-chip-val">${dominanLabel}</div></div>
+        <div class="feature-chip"><div class="feature-chip-label">Telapak (Kanan)</div><div class="feature-chip-val">${feat.palmOrientation || '?'}</div></div>
+        <div class="feature-chip"><div class="feature-chip-label">Pergelangan X</div><div class="feature-chip-val">${feat.handX != null ? feat.handX.toFixed(3) : '?'}</div></div>
+        <div class="feature-chip"><div class="feature-chip-label">Pergelangan Y</div><div class="feature-chip-val">${feat.handY != null ? feat.handY.toFixed(3) : '?'}</div></div>
+      </div>
+      <div class="feature-row">
+        <div class="feature-chip"><div class="feature-chip-label">Di Atas Hidung</div><div class="feature-chip-val">${feat.wristAboveNose ? 'Ya' : 'Tidak'}</div></div>
+        <div class="feature-chip"><div class="feature-chip-label">Di Bawah Bahu</div><div class="feature-chip-val">${feat.wristBelowShoulder ? 'Ya' : 'Tidak'}</div></div>
+        <div class="feature-chip"><div class="feature-chip-label">Gunakan Wajah</div><div class="feature-chip-val">${feat.usesFace ? 'Ya' : 'Tidak'}</div></div>
+        <div class="feature-chip"><div class="feature-chip-label">Gunakan Pose</div><div class="feature-chip-val">${feat.usesPose ? 'Ya' : 'Tidak'}</div></div>
+      </div>
+      <div class="threshold-row">
+        <div class="threshold-row-label">Jari Tangan Kanan (mayoritas dari ${validSamples.length} sample)</div>
+        <div class="threshold-grid">${fingerChips}</div>
+      </div>
+      ${lhFingerChips ? `<div class="threshold-row"><div class="threshold-row-label">Jari Tangan Kiri</div><div class="threshold-grid">${lhFingerChips}</div></div>` : ''}
+      ${feat.thumbPinkyDist != null ? `<div class="threshold-row"><div class="threshold-row-label">Jarak Ibu-Kelingking (Kanan)</div><div class="threshold-grid"><span class="threshold-chip tc-blue">${feat.thumbPinkyDist.toFixed(4)}</span></div></div>` : ''}
+      ${feat.lh_thumbPinkyDist != null ? `<div class="threshold-row"><div class="threshold-row-label">Jarak Ibu-Kelingking (Kiri)</div><div class="threshold-grid"><span class="threshold-chip tc-blue">${feat.lh_thumbPinkyDist.toFixed(4)}</span></div></div>` : ''}
+      ${buildGestureDiagramHTML(feat)}
+    </div>`;
+            }
+            container.innerHTML = html;
+        }
+
+        function buildDescription(gName, feat) {
+            const parts = [];
+            if (feat.usesBothHands) parts.push('dua tangan');
+            else if (feat.usesRightHand) parts.push('kanan');
+            else if (feat.usesLeftHand) parts.push('kiri');
+            if (feat.fingers) {
+                const fingerNames = ['ibu jari', 'telunjuk', 'tengah', 'manis', 'kelingking'];
+                const open = feat.fingers.map((e, i) => e ? fingerNames[i] : null).filter(Boolean);
+                if (open.length > 0 && open.length < 5) parts.push(open.join('+'));
+                else if (open.length === 5) parts.push('semua jari buka');
+                else parts.push('kepalan');
+            }
+            if (feat.palmOrientation) parts.push(feat.palmOrientation === 'palm' ? 'telapak' : 'punggung');
+            if (feat.wristAboveNose) parts.push('di atas hidung');
+            if (feat.wristBelowShoulder) parts.push('bawah bahu');
+            return parts.join(' · ') || gName;
+        }
+
+        function applyGeneratedGestures() {
+            const doneSamples = Object.entries(gestureDB).filter(([, g]) => g.features);
+            if (doneSamples.length === 0) { showToast('Tidak ada gesture untuk diterapkan', 'error'); return }
+            GENERATED_GESTURES = {};
+            GENERATED_DESCS = {};
+            _gestureFeatures = {};
+            for (const [gName, gData] of doneSamples) {
+                const feat = gData.features;
+                if (!feat) continue;
+                _gestureFeatures[gName] = feat;
+                GENERATED_DESCS[gName] = buildDescription(gName, feat);
+                const hand = feat.usesRightHand ? 'rh' : 'lh';
+                const fnBody = buildRuntimeFunction(gName, feat, hand);
+                try {
+                    GENERATED_GESTURES[gName] = new Function('rh', 'lh', 'face', 'pose', 'validHand', 'extended', 'getPalmOrientation', 'wristAboveNose', 'wristBelowShoulder', 'thumbPinkyDist', fnBody);
+                    const orig = GENERATED_GESTURES[gName];
+                    GENERATED_GESTURES[gName] = (rh, lh, face, pose) => orig(rh, lh, face, pose, validHand, extended, getPalmOrientation, wristAboveNose, wristBelowShoulder, thumbPinkyDist);
+                } catch (e) { console.warn('Failed to compile gesture', gName, e) }
+            }
+            renderGeneratedGestureCards();
+            showToast(`${Object.keys(GENERATED_GESTURES).length} gesture diterapkan ke detektor!`, 'success');
+        }
+
+        function buildRuntimeFunction(gName, feat, hand) {
+            const lines = [];
+            if (feat.usesBothHands) {
+                lines.push(`if (!validHand(rh) || !validHand(lh)) return false;`);
+                if (feat.fingers) {
+                    const checks = feat.fingers.map((ext, i) => { const fn = `extended(rh, ${i})`; return ext ? fn : `!${fn}`; });
+                    lines.push(`if (!(${checks.join(' && ')})) return false;`);
+                }
+                if (feat.palmOrientation) {
+                    const expected = feat.palmOrientation === 'palm' ? 'palm' : 'back';
+                    lines.push(`if (getPalmOrientation(rh, true) !== '${expected}') return false;`);
+                }
+                if (feat.thumbPinkyDist != null) {
+                    if (feat.thumbPinkyDist < 0.12) lines.push(`if (thumbPinkyDist(rh) >= 0.15) return false;`);
+                    else if (feat.thumbPinkyDist > 0.25) lines.push(`if (thumbPinkyDist(rh) <= 0.10) return false;`);
+                }
+                if (feat.lh_fingers) {
+                    const checks = feat.lh_fingers.map((ext, i) => { const fn = `extended(lh, ${i})`; return ext ? fn : `!${fn}`; });
+                    lines.push(`if (!(${checks.join(' && ')})) return false;`);
+                }
+                if (feat.lh_palmOrientation) {
+                    const expected = feat.lh_palmOrientation === 'palm' ? 'palm' : 'back';
+                    lines.push(`if (getPalmOrientation(lh, false) !== '${expected}') return false;`);
+                }
+                if (feat.lh_thumbPinkyDist != null) {
+                    if (feat.lh_thumbPinkyDist < 0.12) lines.push(`if (thumbPinkyDist(lh) >= 0.15) return false;`);
+                    else if (feat.lh_thumbPinkyDist > 0.25) lines.push(`if (thumbPinkyDist(lh) <= 0.10) return false;`);
+                }
+            } else {
+                lines.push(`if (!validHand(${hand})) return false;`);
+                if (feat.fingers) {
+                    const checks = feat.fingers.map((ext, i) => { const fn = `extended(${hand}, ${i})`; return ext ? fn : `!${fn}`; });
+                    lines.push(`if (!(${checks.join(' && ')})) return false;`);
+                }
+                if (feat.palmOrientation) {
+                    const expected = feat.palmOrientation === 'palm' ? 'palm' : 'back';
+                    lines.push(`if (getPalmOrientation(${hand}, ${feat.usesRightHand}) !== '${expected}') return false;`);
+                }
+                if (feat.thumbPinkyDist != null) {
+                    if (feat.thumbPinkyDist < 0.12) lines.push(`if (thumbPinkyDist(${hand}) >= 0.15) return false;`);
+                    else if (feat.thumbPinkyDist > 0.25) lines.push(`if (thumbPinkyDist(${hand}) <= 0.10) return false;`);
+                }
+            }
+            if (feat.usesPose) {
+                lines.push(`if (!pose) return false;`);
+                if (feat.wristAboveNose === true) {
+                    const s = feat.usesRightHand ? 'right' : 'left';
+                    lines.push(`if (!wristAboveNose(pose, '${s}')) return false;`);
+                }
+                if (feat.wristBelowShoulder === true) {
+                    const s = feat.usesRightHand ? 'right' : 'left';
+                    lines.push(`if (!wristBelowShoulder(pose, '${s}')) return false;`);
+                }
+            }
+            lines.push(`return true;`);
+            return lines.join('\n');
+        }
+
+        function renderGeneratedGestureCards() {
+            const section = document.getElementById('generatedSection');
+            const grid = document.getElementById('generatedGestureGrid');
+            const names = Object.keys(GENERATED_GESTURES);
+            if (names.length === 0) { section.style.display = 'none'; return }
+            section.style.display = 'block';
+            grid.innerHTML = names.map(name => `
+    <div class="gesture-card generated-card" id="card-${name}">
+      <div class="gesture-card-top">
+        <div class="gesture-dot" id="dot-${name}"></div>
+        <div class="ginfo">
+          <div class="gesture-name">${name} <span id="rankpill-${name}" style="display:none" class="top-rank-pill">#1</span></div>
+          <div class="gesture-desc" id="desc-${name}">${GENERATED_DESCS[name] || 'Auto-generated'}</div>
+          <div id="simtag-${name}" style="display:none" class="similar-tag"></div>
+        </div>
+        <div class="gesture-badge" id="badge-${name}">—</div>
+      </div>
+      <div class="confidence-bar-wrap" id="cbwrap-${name}">
+        <div class="confidence-bar conf-low" id="cbar-${name}" style="width:0%"></div>
+      </div>
+    </div>`).join('');
+        }
+
+        async function refreshJSON() {
+            try {
+                const response = await fetch('model_bisindo.json');
+                if (!response.ok) throw new Error(`File tidak ditemukan (${response.status})`);
+                const data = await response.json();
+                if (data.gestureDB) {
+                    for (const [gName, gData] of Object.entries(data.gestureDB)) {
+                        if (!gestureDB[gName]) gestureDB[gName] = { samples: [], features: null };
+                        if (gData.samples) {
+                            for (const s of gData.samples) {
+                                if (!gestureDB[gName].samples.find(x => x.filename === s.filename)) {
+                                    gestureDB[gName].samples.push(s);
+                                }
+                            }
+                        }
+                        if (gData.features) gestureDB[gName].features = gData.features;
+                    }
+                }
+                if (data.generatedCode) generatedCode = data.generatedCode;
+                renderExtractedData();
+                updateActionButtons();
+                applyGeneratedGestures();
+                showToast(`Import berhasil: ${Object.keys(data.gestureDB || {}).length} gesture dimuat`, 'success');
+            } catch (e) {
+                showToast('Gagal memuat model_bisindo.json: ' + e.message, 'error');
+            }
+        }
+
+        const LS_KEY = 'bisindo_gesture_db_v1';
+        function saveToLocalStorageSilent() {
+            try {
+                const data = { gestureDB: Object.fromEntries(Object.entries(gestureDB).map(([k, v]) => [k, { features: v.features, samples: v.samples.map(s => ({ filename: s.filename, landmarks: s.landmarks })) }])), generatedCode };
+                localStorage.setItem(LS_KEY, JSON.stringify(data));
+            } catch (e) { }
+        }
+        function saveToLocalStorage() { saveToLocalStorageSilent(); showToast('Data disimpan ke localStorage', 'success') }
+        function loadFromLocalStorage() {
+            try {
+                const raw = localStorage.getItem(LS_KEY);
+                if (!raw) { showToast('Tidak ada data tersimpan', 'info'); return }
+                const data = JSON.parse(raw);
+                if (data.gestureDB) {
+                    for (const [gName, gData] of Object.entries(data.gestureDB)) {
+                        if (!gestureDB[gName]) gestureDB[gName] = { samples: [], features: null };
+                        if (gData.features) gestureDB[gName].features = gData.features;
+                        if (gData.samples) { for (const s of gData.samples) { if (!gestureDB[gName].samples.find(x => x.filename === s.filename)) gestureDB[gName].samples.push(s) } }
+                    }
+                }
+                if (data.generatedCode) generatedCode = data.generatedCode;
+                renderExtractedData(); updateActionButtons();
+                showToast(`Data dimuat: ${Object.keys(data.gestureDB || {}).length} gesture`, 'success');
+            } catch (e) { showToast('Gagal memuat data tersimpan', 'error') }
+        }
+        function clearLocalStorage() { localStorage.removeItem(LS_KEY); showToast('Cache localStorage dihapus', 'info') }
+        function clearSavedData() { gestureDB = {}; generatedCode = ''; localStorage.removeItem(LS_KEY); renderExtractedData(); updateActionButtons(); showToast('Data direset', 'info') }
+
+        (function () {
+            const lsInfo = document.getElementById('localStorageStatus');
+            try {
+                const raw = localStorage.getItem(LS_KEY);
+                if (raw) {
+                    const data = JSON.parse(raw);
+                    const count = Object.keys(data.gestureDB || {}).length;
+                    lsInfo.textContent = `Data tersimpan ditemukan: ${count} gesture. Klik "Muat Tersimpan" untuk memuat.`;
+                } else { lsInfo.textContent = 'Belum ada data tersimpan di browser ini.' }
+            } catch (e) { lsInfo.textContent = 'LocalStorage tidak tersedia.' }
+        })();
+    </script>
+</body>
+
+</html>
