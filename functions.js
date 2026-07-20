@@ -1,4 +1,4 @@
-<script>
+
         // ══════════════════════════════════════════════════════════
         //   SHARED CONSTANTS & UTILITIES
         // ══════════════════════════════════════════════════════════
@@ -639,4 +639,3 @@
                 showToast('Gagal memuat model_bisindo.json: ' + e.message, 'error');
             }
         }
-    </script>
